@@ -1,0 +1,32 @@
+services:
+  api:
+    build: ./chatbot-api
+    container_name: mpdagents-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Use your MongoDB Atlas connection
+      - MONGODB_URI=mongodb+srv://yashraj:mla12345@mlachatbot.9xl6yxe.mongodb.net/?retryWrites=true&w=majority&appName=MLAchatbot
+      - MONGO_DB_NAME=MLAchatbot
+      - MONGO_STATE_CHECKPOINT_COLLECTION=checkpoints
+      - MONGO_STATE_WRITES_COLLECTION=checkpoints_writes_aio
+    restart: unless-stopped
+    env_file:
+      - ./chatbot-api/.env
+    networks:
+      - mpdagents-network
+
+  ui:
+    build: ./chatbot-ui
+    container_name: mpdagents-ui
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - mpdagents-network
+
+networks:
+  mpdagents-network:
+    name: mpdagents-network
