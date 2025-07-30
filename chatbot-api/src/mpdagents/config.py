@@ -43,5 +43,13 @@ class Settings(BaseSettings):
     MONGO_DB_NAME: str 
     MONGO_STATE_CHECKPOINT_COLLECTION: str 
     MONGO_STATE_WRITES_COLLECTION: str
-    
+
+
+
+    # # --- RAG PineCone Configurations ---
+    # Initialize the OpenAI client
+    PINECONE_API_KEY : str
+    PINECONE_INDEX_NAME : str 
+
+
 settings = Settings()

@@ -17,6 +17,10 @@ from mpdagents.config import settings
 async def get_response(
     messages: str | list[str] | list[dict[str, Any]],
     thread_id: str,
+    character_id: str | None = None,
+    character_name: str | None = None,
+    character_style: str | None = None,
+    character_perspective: str | None = None,
     new_thread: bool = False
 ) -> tuple[str, ChatbotState]:
     """Run a conversation through the workflow graph.
@@ -48,8 +52,14 @@ async def get_response(
             # thread_id = (
             #     philosopher_id if not new_thread else f"{philosopher_id}-{uuid.uuid4()}"
             # )
-            if new_thread or not thread_id:
-                thread_id = str(uuid.uuid4())
+
+            # thread_id = (
+            #     thread_id if not new_thread else f"{character_id}-{thread_id}"
+            # )
+            thread_id = f"{thread_id}-{character_id}"
+
+            # if new_thread or not thread_id:
+            #     thread_id = f"{character_id}-{thread_id}" 
 
             config = {
                 "configurable": {"thread_id": thread_id},
@@ -58,6 +68,10 @@ async def get_response(
             output_state = await graph.ainvoke(
                 input={
                     "messages": __format_messages(messages=messages),
+                    "character_id": character_id,
+                    "character_name": character_name,
+                    "character_style": character_style,
+                    "character_perspective": character_perspective,
 
                 },
                 config=config,

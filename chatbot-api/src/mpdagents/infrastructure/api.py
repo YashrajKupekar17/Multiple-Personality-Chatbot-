@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from opik.integrations.langchain import OpikTracer
 from pydantic import BaseModel
 
+from mpdagents.domain.character_factory import CharacterFactory
 from mpdagents.application.conversation_service.generate_response import (
     get_response,
     # get_streaming_response,
@@ -43,6 +44,7 @@ app.add_middleware(
 class ChatMessage(BaseModel):
     message: str
     thread_id: str | None = None
+    character_id: str | None = None
     new_thread: bool = False
 
 
@@ -53,9 +55,16 @@ async def chat(chat_message: ChatMessage):
         # philosopher_factory = PhilosopherFactory()
         # philosopher = philosopher_factory.get_philosopher(chat_message.philosopher_id)
 
+        character_factory = CharacterFactory()
+
+        character = character_factory.get_character(chat_message.character_id)
         response, _ = await get_response(
             messages=chat_message.message,
             thread_id=chat_message.thread_id,
+            character_id=chat_message.character_id,
+            character_name=character.name,
+            character_style=character.style,
+            character_perspective=character.perspective,
             new_thread=chat_message.new_thread,
             # philosopher_id=chat_message.philosopher_id,
             # philosopher_name=philosopher.name,
@@ -65,7 +74,8 @@ async def chat(chat_message: ChatMessage):
         )
         return {
             "response": response,
-            "thread_id": chat_message.thread_id
+            "thread_id": chat_message.thread_id,
+            "character_id": chat_message.character_id
         }
 
     except Exception as e:
