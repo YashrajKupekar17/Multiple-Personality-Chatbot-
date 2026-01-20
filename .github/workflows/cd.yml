@@ -1,0 +1,61 @@
+name: CD Pipeline
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Start Minikube
+        uses: medyagh/setup-minikube@latest
+
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -f kubernetes/secrets.yaml
+
+          kubectl apply -f kubernetes/api-deployment.yaml
+          kubectl wait --for=condition=ready pod -l app=chatbot-api --timeout=180s
+
+          kubectl apply -f kubernetes/ui-deployment.yaml
+          kubectl wait --for=condition=ready pod -l app=chatbot-ui --timeout=180s
+
+          kubectl get all
+
+      - name: Get Service URLs
+        run: |
+          MINIKUBE_IP=$(minikube ip)
+          echo "API_URL=http://${MINIKUBE_IP}:30080" >> $GITHUB_ENV
+          echo "UI_URL=http://${MINIKUBE_IP}:30081" >> $GITHUB_ENV
+
+      - name: Health Check
+        run: |
+          curl -f ${API_URL}/health || exit 1
+          echo "✓ API is healthy"
+          curl -f ${UI_URL} || exit 1
+          echo "✓ UI is healthy"
+
+      - name: DAST Scan (OWASP ZAP)
+        continue-on-error: true
+        run: |
+          docker run --rm --network host \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t ${API_URL}/health -r zap-report.html
+          echo "DAST scan completed"
+
+      - name: Show Logs
+        if: always()
+        run: |
+          kubectl get deployments
+          kubectl get pods
+          kubectl logs -l app=chatbot-api --tail=30
