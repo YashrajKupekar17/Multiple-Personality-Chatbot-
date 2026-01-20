@@ -1,7 +1,8 @@
 from mpdagents.domain.exceptions import (
     CharacterNameNotFound,
     CharacterPerspectiveNotFound,
-    CharacterStyleNotFound
+    CharacterStyleNotFound,
+    CharacterContextNotFound,
 )
 from mpdagents.domain.character import Character
 

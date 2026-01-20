@@ -40,6 +40,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from pydantic import BaseModel
 
 class ChatMessage(BaseModel):
     message: str
