@@ -1,5 +1,4 @@
 name: CD Pipeline
-
 on:
   workflow_run:
     workflows: ["CI Pipeline"]
@@ -12,50 +11,84 @@ jobs:
     name: Deploy to Kubernetes
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
-
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
+      
       - name: Start Minikube
         uses: medyagh/setup-minikube@latest
-
+      
       - name: Deploy to Kubernetes
         run: |
           kubectl apply -f kubernetes/secrets.yaml
-
           kubectl apply -f kubernetes/api-deployment.yaml
           kubectl wait --for=condition=ready pod -l app=chatbot-api --timeout=180s
-
           kubectl apply -f kubernetes/ui-deployment.yaml
           kubectl wait --for=condition=ready pod -l app=chatbot-ui --timeout=180s
-
           kubectl get all
-
-      - name: Get Service URLs
+      
+      - name: Health Check with Port Forwarding
         run: |
-          MINIKUBE_IP=$(minikube ip)
-          echo "API_URL=http://${MINIKUBE_IP}:30080" >> $GITHUB_ENV
-          echo "UI_URL=http://${MINIKUBE_IP}:30081" >> $GITHUB_ENV
-
-      - name: Health Check
-        run: |
-          curl -f ${API_URL}/health || exit 1
-          echo "✓ API is healthy"
-          curl -f ${UI_URL} || exit 1
-          echo "✓ UI is healthy"
-
+          # Port forward API in background
+          kubectl port-forward service/chatbot-api 8000:8000 &
+          API_PF_PID=$!
+          
+          # Port forward UI in background
+          kubectl port-forward service/chatbot-ui 8501:8501 &
+          UI_PF_PID=$!
+          
+          # Wait for port forwards to be ready
+          sleep 5
+          
+          # Health check API
+          for i in {1..10}; do
+            if curl -f http://localhost:8000/health; then
+              echo "✓ API is healthy"
+              break
+            fi
+            echo "Waiting for API... (attempt $i)"
+            sleep 3
+          done
+          
+          # Health check UI
+          for i in {1..10}; do
+            if curl -f http://localhost:8501; then
+              echo "✓ UI is healthy"
+              break
+            fi
+            echo "Waiting for UI... (attempt $i)"
+            sleep 3
+          done
+          
+          # Clean up port forwards
+          kill $API_PF_PID $UI_PF_PID || true
+      
       - name: DAST Scan (OWASP ZAP)
         continue-on-error: true
         run: |
+          # Port forward for ZAP scan
+          kubectl port-forward service/chatbot-api 8000:8000 &
+          PF_PID=$!
+          sleep 5
+          
           docker run --rm --network host \
             ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py -t ${API_URL}/health -r zap-report.html
+            zap-baseline.py -t http://localhost:8000/health -r zap-report.html
+          
+          kill $PF_PID || true
           echo "DAST scan completed"
-
+      
       - name: Show Logs
         if: always()
         run: |
+          echo "=== Deployments ==="
           kubectl get deployments
+          echo "=== Pods ==="
           kubectl get pods
-          kubectl logs -l app=chatbot-api --tail=30
+          echo "=== Services ==="
+          kubectl get services
+          echo "=== API Logs ==="
+          kubectl logs -l app=chatbot-api --tail=50
+          echo "=== UI Logs ==="
+          kubectl logs -l app=chatbot-ui --tail=50
