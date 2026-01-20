@@ -72,12 +72,25 @@ jobs:
           PF_PID=$!
           sleep 5
           
+          # Create directory for ZAP reports
+          mkdir -p ${GITHUB_WORKSPACE}/zap-reports
+          
+          # Run ZAP scan with mounted volume for reports
           docker run --rm --network host \
+            -v ${GITHUB_WORKSPACE}/zap-reports:/zap/wrk:rw \
             ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py -t http://localhost:8000/health -r zap-report.html
+            zap-baseline.py -t http://localhost:8000/health -r zap-report.html -I
           
           kill $PF_PID || true
           echo "DAST scan completed"
+      
+      - name: Upload ZAP Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-security-report
+          path: zap-reports/zap-report.html
+          retention-days: 30
       
       - name: Show Logs
         if: always()
