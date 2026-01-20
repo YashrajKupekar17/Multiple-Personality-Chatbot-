@@ -1,8 +1,7 @@
 import streamlit as st
 import requests
-import json
 from datetime import datetime
-from typing import List, Dict
+
 import numpy as np
 import logging
 
@@ -122,7 +121,7 @@ with st.sidebar:
         st.divider()
         if st.button("🗑️ Clear All Threads", type="secondary"):
             if st.button("⚠️ Confirm Clear All", type="secondary"):
-                logging.warning(f"Clearing all threads & messages.")
+                logging.warning("Clearing all threads & messages.")
                 st.session_state.threads = set()
                 st.session_state.messages = {}
                 st.session_state.current_thread = None
