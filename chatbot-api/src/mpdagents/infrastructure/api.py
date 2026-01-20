@@ -75,6 +75,10 @@ async def chat(chat_message: ChatMessage):
         opik_tracer.flush()
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 @app.websocket("/ws/chat")
 async def websocket_chat(websocket: WebSocket):
     await websocket.accept()

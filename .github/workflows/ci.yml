@@ -127,18 +127,16 @@ jobs:
 
     - name: Run API container and test
       run: |
-        docker run -d -p 8000:8000 --name api-test \
-        -e MONGODB_URI="mongodb://localhost:27017" \
-        -e MONGO_DB_NAME="testdb" \
-        -e MONGO_STATE_CHECKPOINT_COLLECTION="checkpoints" \
-        -e MONGO_STATE_WRITES_COLLECTION="writes" \
-        ${{ secrets.DOCKERHUB_USERNAME }}/chatbot-api:latest
-        sleep 15
+        docker run -d -p 8000:8000 --name api-test ${{ secrets.DOCKERHUB_USERNAME }}/chatbot-api:latest
+        sleep 10
         docker logs api-test
-        curl -f http://localhost:8000/docs
+        curl -f http://localhost:8000/health
+        docker logs api-test
         docker stop api-test
         docker rm api-test
 
+        
+        
     - name: Run UI container and test
       run: |
         docker run -d -p 8501:8501 --name ui-test ${{ secrets.DOCKERHUB_USERNAME }}/chatbot-ui:latest

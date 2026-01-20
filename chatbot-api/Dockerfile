@@ -14,4 +14,4 @@ RUN uv sync --frozen --no-cache
 COPY src/mpdagents mpdagents/
 
 # Use uvicorn directly instead of fastapi CLI
-CMD ["/app/.venv/bin/python", "-m", "uvicorn", "mpdagents.infrastructure.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "mpdagents.infrastructure.api:app", "--host", "0.0.0.0", "--port", "8000"]
