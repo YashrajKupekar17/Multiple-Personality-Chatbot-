@@ -7,8 +7,12 @@ on:
 
 jobs:
   build-test:
-    name: Build & Test
+    name: Build, Test & Secure
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      security-events: write
 
     steps:
       - name: Checkout code
@@ -32,7 +36,41 @@ jobs:
         working-directory: chatbot-ui
         run: |
           uv sync --frozen
-          
+
+      # Linting (Code Quality)
+
+      - name: Run API linting (ruff)
+        working-directory: chatbot-api
+        run: |
+          uv run ruff check .
+
+      - name: Run UI linting (ruff)
+        working-directory: chatbot-ui
+        run: |
+          uv run ruff check .
+
+
+      # SAST – CodeQL
+
+      - name: Initialize CodeQL (Python)
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+
+      # SCA – Dependency Scan
+
+      - name: Dependency vulnerability scan (pip-audit)
+        run: |
+          pip install pip-audit
+          pip-audit || true
+
+
+      # Unit Tests
+
       - name: Run API tests
         working-directory: chatbot-api
         run: |
