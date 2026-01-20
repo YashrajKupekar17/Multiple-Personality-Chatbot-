@@ -19,13 +19,34 @@ jobs:
       - name: Start Minikube
         uses: medyagh/setup-minikube@latest
       
-      - name: Deploy to Kubernetes
+      - name: Create Secrets with Valid Credentials
         run: |
-          kubectl apply -f kubernetes/secrets.yaml
+          # Replace these with your actual secrets from GitHub repository secrets
+          kubectl create secret generic chatbot-secrets \
+            --from-literal=OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
+            --from-literal=MONGO_URI="${{ secrets.MONGO_URI }}" \
+            --from-literal=PINECONE_API_KEY="${{ secrets.PINECONE_API_KEY }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+      
+      - name: Deploy API
+        run: |
           kubectl apply -f kubernetes/api-deployment.yaml
-          kubectl wait --for=condition=ready pod -l app=chatbot-api --timeout=180s
+          echo "Waiting for API pod to be ready..."
+          kubectl wait --for=condition=ready pod -l app=chatbot-api --timeout=300s || {
+            echo "API pod failed to start. Checking logs..."
+            kubectl describe pod -l app=chatbot-api
+            kubectl logs -l app=chatbot-api --tail=100
+            exit 1
+          }
+      
+      - name: Deploy UI
+        run: |
           kubectl apply -f kubernetes/ui-deployment.yaml
+          echo "Waiting for UI pod to be ready..."
           kubectl wait --for=condition=ready pod -l app=chatbot-ui --timeout=180s
+      
+      - name: Show Deployment Status
+        run: |
           kubectl get all
       
       - name: Health Check with Port Forwarding
@@ -39,30 +60,50 @@ jobs:
           UI_PF_PID=$!
           
           # Wait for port forwards to be ready
-          sleep 5
+          echo "Waiting for port forwards to establish..."
+          sleep 10
           
-          # Health check API
+          # Health check API with retries
+          echo "Testing API health endpoint..."
+          API_HEALTHY=false
           for i in {1..10}; do
-            if curl -f http://localhost:8000/health; then
+            if curl -f -s http://localhost:8000/health > /dev/null 2>&1; then
               echo "✓ API is healthy"
+              API_HEALTHY=true
               break
             fi
-            echo "Waiting for API... (attempt $i)"
-            sleep 3
+            echo "Waiting for API... (attempt $i/10)"
+            sleep 5
           done
+          
+          if [ "$API_HEALTHY" = false ]; then
+            echo " API health check failed after 10 attempts"
+            kubectl logs -l app=chatbot-api --tail=50
+            kill $API_PF_PID $UI_PF_PID 2>/dev/null || true
+            exit 1
+          fi
           
           # Health check UI
+          echo "Testing UI endpoint..."
+          UI_HEALTHY=false
           for i in {1..10}; do
-            if curl -f http://localhost:8501; then
+            if curl -f -s http://localhost:8501 > /dev/null 2>&1; then
               echo "✓ UI is healthy"
+              UI_HEALTHY=true
               break
             fi
-            echo "Waiting for UI... (attempt $i)"
+            echo "Waiting for UI... (attempt $i/10)"
             sleep 3
           done
           
+          if [ "$UI_HEALTHY" = false ]; then
+            echo " UI health check failed"
+            kill $API_PF_PID $UI_PF_PID 2>/dev/null || true
+            exit 1
+          fi
+          
           # Clean up port forwards
-          kill $API_PF_PID $UI_PF_PID || true
+          kill $API_PF_PID $UI_PF_PID 2>/dev/null || true
       
       - name: DAST Scan (OWASP ZAP)
         continue-on-error: true
@@ -70,18 +111,20 @@ jobs:
           # Port forward for ZAP scan
           kubectl port-forward service/chatbot-api 8000:8000 &
           PF_PID=$!
-          sleep 5
+          sleep 10
           
-          # Create directory for ZAP reports
+          # Create directory for ZAP reports with proper permissions
           mkdir -p ${GITHUB_WORKSPACE}/zap-reports
+          chmod 777 ${GITHUB_WORKSPACE}/zap-reports
           
           # Run ZAP scan with mounted volume for reports
           docker run --rm --network host \
             -v ${GITHUB_WORKSPACE}/zap-reports:/zap/wrk:rw \
+            -u zap \
             ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py -t http://localhost:8000/health -r zap-report.html -I
+            zap-baseline.py -t http://localhost:8000/health -I || echo "ZAP scan completed with warnings"
           
-          kill $PF_PID || true
+          kill $PF_PID 2>/dev/null || true
           echo "DAST scan completed"
       
       - name: Upload ZAP Report
@@ -89,19 +132,27 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: zap-security-report
-          path: zap-reports/zap-report.html
+          path: zap-reports/
           retention-days: 30
+          if-no-files-found: warn
       
       - name: Show Logs
         if: always()
         run: |
           echo "=== Deployments ==="
           kubectl get deployments
+          echo ""
           echo "=== Pods ==="
           kubectl get pods
+          echo ""
           echo "=== Services ==="
           kubectl get services
-          echo "=== API Logs ==="
-          kubectl logs -l app=chatbot-api --tail=50
-          echo "=== UI Logs ==="
-          kubectl logs -l app=chatbot-ui --tail=50
+          echo ""
+          echo "=== API Pod Description ==="
+          kubectl describe pod -l app=chatbot-api
+          echo ""
+          echo "=== API Logs (last 100 lines) ==="
+          kubectl logs -l app=chatbot-api --tail=100 || echo "No API logs available"
+          echo ""
+          echo "=== UI Logs (last 50 lines) ==="
+          kubectl logs -l app=chatbot-ui --tail=50 || echo "No UI logs available"
