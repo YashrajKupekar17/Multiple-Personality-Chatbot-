@@ -1,0 +1,44 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: |
+          pip install uv
+
+      - name: Install API dependencies
+        working-directory: chatbot-api
+        run: |
+          uv sync --frozen
+
+      - name: Install UI dependencies
+        working-directory: chatbot-ui
+        run: |
+          uv sync --frozen
+          
+      - name: Run API tests
+        working-directory: chatbot-api
+        run: |
+          if [ -d "tests" ]; then uv run pytest; else echo "No API tests found"; fi
+
+      - name: Run UI tests
+        working-directory: chatbot-ui
+        run: |
+          echo "UI tests placeholder"

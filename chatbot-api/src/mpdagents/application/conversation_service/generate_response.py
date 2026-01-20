@@ -82,6 +82,81 @@ async def get_response(
         raise RuntimeError(f"Error running conversation workflow: {str(e)}") from e
 
 
+
+async def get_streaming_response(
+    messages: str | list[str] | list[dict[str, Any]],
+    thread_id: str,
+    character_id: str | None = None,
+    character_name: str | None = None,
+    character_style: str | None = None,
+    character_perspective: str | None = None,
+    new_thread: bool = False
+) -> AsyncGenerator[str, None]:
+    """Run a conversation through the workflow graph and yield streaming responses.
+
+    Args:
+        messages: Initial message to start the conversation.
+        thread_id: Unique identifier for the conversation thread.
+        character_id: Identifier for the character in the conversation.
+        character_name: Name of the character.
+        character_style: Style of the character.
+        character_perspective: Perspective of the character.
+        new_thread: Whether to start a new thread.
+
+    Yields:
+        str: Streaming response content.
+
+    Raises:
+        RuntimeError: If there's an error running the conversation workflow.
+    """
+
+    graph_builder = create_workflow_graph()
+    try:
+        async with AsyncMongoDBSaver.from_conn_string(
+            conn_string=settings.MONGO_URI,
+            db_name=settings.MONGO_DB_NAME,
+            checkpoint_collection_name=settings.MONGO_STATE_CHECKPOINT_COLLECTION,
+            writes_collection_name=settings.MONGO_STATE_WRITES_COLLECTION,
+        ) as checkpointer:
+            graph = graph_builder.compile(checkpointer=checkpointer)
+            opik_tracer = OpikTracer(graph=graph.get_graph(xray=True))
+
+            thread_id = f"{thread_id}-{character_id}"
+
+            # if new_thread or not thread_id:
+            #     thread_id = f"{character_id}-{thread_id}" 
+
+            config = {
+                "configurable": {"thread_id": thread_id},
+                "callbacks": [opik_tracer],
+            }
+
+            async for chunk in graph.astream(
+                input={
+                    "messages": __format_messages(messages=messages),
+                    "character_id": character_id,
+                    "character_name": character_name,
+                    "character_style": character_style,
+                    "character_perspective": character_perspective,
+                },
+                config=config,
+                stream_mode="messages"
+            ):
+                if chunk[1]["langgraph_node"] == "conversation_node" and isinstance(
+                    chunk[0], AIMessageChunk
+                ):
+                    yield chunk[0].content
+
+    except Exception as e:
+        raise RuntimeError(
+            f"Error running streaming conversation workflow: {str(e)}"
+        ) from e
+    
+
+
+    
+
+
 def __format_messages(
     messages: Union[str, list[dict[str, Any]]],
 ) -> list[Union[HumanMessage, AIMessage]]:
