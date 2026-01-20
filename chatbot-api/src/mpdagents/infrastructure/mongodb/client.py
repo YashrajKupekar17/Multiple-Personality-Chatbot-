@@ -107,7 +107,7 @@ class MongoClientWrapper(Generic[T]):
             # logger.debug(
             #     f"Cleared collection. Deleted {result.deleted_count} documents."
             # )
-        except errors.PyMongoError:
+        except errors.PyMongoError as e:
             # logger.error(f"Error clearing the collection: {e}")
             raise
 
