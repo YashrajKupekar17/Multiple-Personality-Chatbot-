@@ -6,7 +6,7 @@ from langchain_core.runnables import RunnableConfig
 from mpdagents.config import settings
 from mpdagents.application.rag.rag import get_rag_context,Rag_Input_Schema
 from typing import Optional
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage
 
 async def conversation_node(state: ChatbotState, config: RunnableConfig):
     summary = state.get("summary", "")

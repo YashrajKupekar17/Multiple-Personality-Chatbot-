@@ -61,7 +61,7 @@ class MongoClientWrapper(Generic[T]):
         try:
             self.client = MongoClient(mongodb_uri, appname="philoagents")
             self.client.admin.command("ping")
-        except Exception as e:
+        except Exception:
             # logger.error(f"Failed to initialize MongoDBService: {e}")
             raise
 
@@ -103,6 +103,7 @@ class MongoClientWrapper(Generic[T]):
 
         try:
             result = self.collection.delete_many({})
+            print(result)
             # logger.debug(
             #     f"Cleared collection. Deleted {result.deleted_count} documents."
             # )
@@ -135,7 +136,7 @@ class MongoClientWrapper(Generic[T]):
 
             self.collection.insert_many(dict_documents)
             # logger.debug(f"Inserted {len(documents)} documents into MongoDB.")
-        except errors.PyMongoError as e:
+        except errors.PyMongoError:
             # logger.error(f"Error inserting documents: {e}")
             raise
 
@@ -156,7 +157,7 @@ class MongoClientWrapper(Generic[T]):
             documents = list(self.collection.find(query).limit(limit))
             # logger.debug(f"Fetched {len(documents)} documents with query: {query}")
             return self.__parse_documents(documents)
-        except Exception as e:
+        except Exception:
             # logger.error(f"Error fetching documents: {e}")
             raise
 
@@ -198,7 +199,7 @@ class MongoClientWrapper(Generic[T]):
 
         try:
             return self.collection.count_documents({})
-        except errors.PyMongoError as e:
+        except errors.PyMongoError:
             # logger.error(f"Error counting documents in MongoDB: {e}")
             raise
 
