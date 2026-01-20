@@ -105,7 +105,6 @@ jobs:
           image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/chatbot-api:latest
           severity: HIGH,CRITICAL
           exit-code: 1
-          vuln-type: library
 
       - name: Run Trivy scan on UI image
         uses: aquasecurity/trivy-action@0.24.0
@@ -113,8 +112,6 @@ jobs:
           image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/chatbot-ui:latest
           severity: HIGH,CRITICAL
           exit-code: 1
-          vuln-type: library
-
 
 
       # Container Runtime Test
