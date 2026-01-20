@@ -7,38 +7,156 @@ on:
 
 jobs:
   build-test:
-    name: Build & Test
+    name: Build, Test & Secure
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      security-events: write
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+    # Checkout
 
-      - name: Install uv
-        run: |
-          pip install uv
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Install API dependencies
-        working-directory: chatbot-api
-        run: |
-          uv sync --frozen
 
-      - name: Install UI dependencies
-        working-directory: chatbot-ui
-        run: |
-          uv sync --frozen
-          
-      - name: Run API tests
-        working-directory: chatbot-api
-        run: |
-          if [ -d "tests" ]; then uv run pytest; else echo "No API tests found"; fi
+    # Setup Python
 
-      - name: Run UI tests
-        working-directory: chatbot-ui
-        run: |
-          echo "UI tests placeholder"
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install uv
+      run: pip install uv
+
+
+    # Install dependencies
+
+    - name: Install API dependencies
+      working-directory: chatbot-api
+      run: uv sync --frozen
+
+    - name: Install UI dependencies
+      working-directory: chatbot-ui
+      run: uv sync --frozen
+
+
+    # Linting (Soft Gate)
+
+    - name: Run API linting (ruff)
+      working-directory: chatbot-api
+      continue-on-error: true
+      run: uv run ruff check .
+
+    - name: Run UI linting (ruff)
+      working-directory: chatbot-ui
+      continue-on-error: true
+      run: uv run ruff check .
+
+
+    # SAST – CodeQL
+
+    - name: Initialize CodeQL (Python)
+      uses: github/codeql-action/init@v3
+      with:
+        languages: python
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+
+
+    # SCA – Dependency Scan (Soft Gate)
+
+    - name: Dependency vulnerability scan (pip-audit)
+      continue-on-error: true
+      run: |
+        pip install pip-audit
+        pip-audit
+
+
+    # Unit Tests
+
+    - name: Run API tests
+      working-directory: chatbot-api
+      run: |
+        if [ -d "tests" ]; then uv run pytest; else echo "No API tests found"; fi
+
+    - name: Run UI tests
+      working-directory: chatbot-ui
+      run: echo "UI tests placeholder"
+
+
+    # Docker Setup
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+
+    # Build Docker Images
+
+    - name: Build API Docker image
+      run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/chatbot-api:latest ./chatbot-api
+
+    - name: Build UI Docker image
+      run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/chatbot-ui:latest ./chatbot-ui
+
+
+    # Trivy – Image Scan (Hard Gate for CRITICAL)
+
+    - name: Run Trivy scan on API image
+      uses: aquasecurity/trivy-action@0.24.0
+      with:
+        image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/chatbot-api:latest
+        severity: CRITICAL
+        exit-code: 1
+        vuln-type: library
+
+    - name: Run Trivy scan on UI image
+      uses: aquasecurity/trivy-action@0.24.0
+      with:
+        image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/chatbot-ui:latest
+        severity: CRITICAL
+        exit-code: 1
+        vuln-type: library
+
+
+    # Runtime Container Tests
+
+    - name: Run API container and test
+      run: |
+        docker run -d -p 8000:8000 --name api-test ${{ secrets.DOCKERHUB_USERNAME }}/chatbot-api:latest
+        sleep 15
+        curl -f http://localhost:8000/docs
+        docker logs api-test
+        docker stop api-test
+        docker rm api-test
+
+    - name: Run UI container and test
+      run: |
+        docker run -d -p 8501:8501 --name ui-test ${{ secrets.DOCKERHUB_USERNAME }}/chatbot-ui:latest
+        sleep 15
+        curl -f http://localhost:8501
+        docker logs ui-test
+        docker stop ui-test
+        docker rm ui-test
+
+
+    # Login to DockerHub
+
+    - name: Login to DockerHub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+
+    # Push Images
+
+    - name: Push API image
+      run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/chatbot-api:latest
+
+    - name: Push UI image
+      run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/chatbot-ui:latest
