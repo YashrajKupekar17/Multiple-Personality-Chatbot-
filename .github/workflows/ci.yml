@@ -103,7 +103,7 @@ jobs:
         uses: aquasecurity/trivy-action@0.24.0
         with:
           image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/chatbot-api:latest
-          severity: CRITICAL
+          severity: HIGH,CRITICAL
           exit-code: 1
           vuln-type: library
 
@@ -111,10 +111,9 @@ jobs:
         uses: aquasecurity/trivy-action@0.24.0
         with:
           image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/chatbot-ui:latest
-          severity: CRITICAL
+          severity: HIGH,CRITICAL
           exit-code: 1
           vuln-type: library
-
 
 
 
